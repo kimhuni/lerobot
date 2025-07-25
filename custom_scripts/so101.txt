@@ -1,0 +1,2 @@
+follow the URL below
+https://huggingface.co/docs/lerobot/en/so101?example=Linux#configure-the-motors
