@@ -1,18 +1,16 @@
 python -m lerobot.record \
-  --robot.type=bi_so100_follower \
-  --robot.left_arm_port=/dev/tty.usbmodem5A460851411 \
-  --robot.right_arm_port=/dev/tty.usbmodem5A460812391 \
-  --robot.id=bimanual_follower \
-  --robot.cameras='{
-    left: {"type": "opencv", "index_or_path": 0, "width": 640, "height": 480, "fps": 30},
-    top: {"type": "opencv", "index_or_path": 1, "width": 640, "height": 480, "fps": 30},
-    right: {"type": "opencv", "index_or_path": 2, "width": 640, "height": 480, "fps": 30}
-  }' \
-  --teleop.type=bi_so100_leader \
-  --teleop.left_arm_port=/dev/tty.usbmodem5A460828611 \
-  --teleop.right_arm_port=/dev/tty.usbmodem5A460826981 \
-  --teleop.id=bimanual_leader \
-  --display_data=true \
-  --dataset.repo_id=${HF_USER}/bimanual-so100-handover-cube \
-  --dataset.num_episodes=25 \
-  --dataset.single_task="Grab and handover the red cube to the other arm"
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=slave \
+    --robot.cameras="{ front: {type: opencv, index_or_path: 0, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM0 \
+    --teleop.id=master \
+    --display_data=true \
+    --dataset.repo_id=islab/my_dataset \
+    --dataset.root=/home/isl-so100/Desktop/disk/test_data_2 \
+    --dataset.num_episodes=2 \
+    --dataset.fps=30 \
+    --dataset.episode_time_s=10 \
+    --dataset.reset_time_s=10 \
+    --dataset.single_task="Grab the black cube"

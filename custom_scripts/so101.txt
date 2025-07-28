@@ -36,6 +36,12 @@ wrist_roll      |      0 |   1942 |   4095
 gripper         |   2046 |   2047 |   2047
 
 --------------------------------------------
+-------------<find camera>
+python -m lerobot.find_cameras opencv
+# or realsense for Intel Realsense cameras
+# /dev/video0
+
+---------------------------------------------
 Camera #0:
   Name: OpenCV Camera @ /dev/video0
   Type: OpenCV
@@ -55,5 +61,5 @@ Camera #0:
     --robot.port=/dev/ttyACM1 \
     --robot.id=slave \
     --dataset.repo_id=islab/my_dataset \
-    --dataset.root=/home/isl-so100/Desktop/disk/test_data \
-    --dataset.episode=0
+    --dataset.root=/home/isl-so100/Desktop/disk/test_data_2 \
+    --dataset.episode=1
