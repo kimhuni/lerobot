@@ -1,2 +1,59 @@
 follow the URL below
 https://huggingface.co/docs/lerobot/en/so101?example=Linux#configure-the-motors
+
+slave
+-/dev/ttyACM0
+
+master
+-/dev/ttyACM1
+
+-------------------------------calibrate-------------------------------------
+python -m lerobot.calibrate \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM0 \
+    --teleop.id=master
+
+NAME            |    MIN |    POS |    MAX
+shoulder_pan    |   1151 |   2047 |   2838
+shoulder_lift   |    863 |    878 |   3239
+elbow_flex      |    878 |   3087 |   3095
+wrist_flex      |    861 |   2594 |   3172
+wrist_roll      |    246 |   2038 |   4087
+gripper         |   2046 |   2046 |   2047
+
+
+python -m lerobot.calibrate \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=slave
+
+NAME            |    MIN |    POS |    MAX
+shoulder_pan    |   1113 |   2022 |   2912
+shoulder_lift   |    853 |    880 |   3222
+elbow_flex      |    873 |   3096 |   3111
+wrist_flex      |    824 |   1963 |   3146
+wrist_roll      |      0 |   1942 |   4095
+gripper         |   2046 |   2047 |   2047
+
+--------------------------------------------
+Camera #0:
+  Name: OpenCV Camera @ /dev/video0
+  Type: OpenCV
+  Id: /dev/video0
+  Backend api: V4L2
+  Default stream profile:
+    Format: 0.0
+    Width: 640
+    Height: 480
+    Fps: 30.0
+
+
+
+ -------------------replay------------------
+ python -m lerobot.replay \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=slave \
+    --dataset.repo_id=islab/my_dataset \
+    --dataset.root=/home/isl-so100/Desktop/disk/test_data \
+    --dataset.episode=0
