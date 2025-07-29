@@ -149,6 +149,8 @@ class DatasetRecordConfig:
     # Number of episodes to record before batch encoding videos
     # Set to 1 for immediate encoding (default behavior), or higher for batched encoding
     video_encoding_batch_size: int = 1
+    # Specify the starting episode index for recording. If None, it appends to the existing dataset.
+    start_episode_idx: int | None = None
 
     def __post_init__(self):
         if self.single_task is None:
@@ -298,22 +300,31 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
     obs_features = hw_to_dataset_features(robot.observation_features, "observation", cfg.dataset.video)
     dataset_features = {**action_features, **obs_features}
 
-    if cfg.resume:
-        dataset = LeRobotDataset(
-            cfg.dataset.repo_id,
-            root=cfg.dataset.root,
-            batch_encoding_size=cfg.dataset.video_encoding_batch_size,
-        )
+    should_resume = cfg.resume or (cfg.dataset.start_episode_idx is not None)
 
-        if hasattr(robot, "cameras") and len(robot.cameras) > 0:
-            dataset.start_image_writer(
-                num_processes=cfg.dataset.num_image_writer_processes,
-                num_threads=cfg.dataset.num_image_writer_threads_per_camera * len(robot.cameras),
+    if should_resume:
+        logging.info(f"Loading existing dataset: {cfg.dataset.repo_id}")
+        try:
+            dataset = LeRobotDataset(
+                cfg.dataset.repo_id,
+                root=cfg.dataset.root,
+                batch_encoding_size=cfg.dataset.video_encoding_batch_size,
             )
-        sanity_check_dataset_robot_compatibility(dataset, robot, cfg.dataset.fps, dataset_features)
+            if hasattr(robot, "cameras") and len(robot.cameras) > 0:
+                dataset.start_image_writer(
+                    num_processes=cfg.dataset.num_image_writer_processes,
+                    num_threads=cfg.dataset.num_image_writer_threads_per_camera * len(robot.cameras),
+                )
+            sanity_check_dataset_robot_compatibility(dataset, robot, cfg.dataset.fps, dataset_features)
+        except FileNotFoundError:
+             logging.error(f"Dataset not found at {cfg.dataset.root}/{cfg.dataset.repo_id}. Cannot resume.")
+             logging.error("Please check the path or run without --resume to create a new dataset.")
+             return
+
     else:
         # Create empty dataset or load existing saved episodes
         sanity_check_dataset_name(cfg.dataset.repo_id, cfg.policy)
+        logging.info(f"Creating new dataset: {cfg.dataset.repo_id}")
         dataset = LeRobotDataset.create(
             cfg.dataset.repo_id,
             cfg.dataset.fps,
@@ -336,9 +347,31 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
     listener, events = init_keyboard_listener()
 
     with VideoEncodingManager(dataset):
-        recorded_episodes = 0
-        while recorded_episodes < cfg.dataset.num_episodes and not events["stop_recording"]:
-            log_say(f"Recording episode {dataset.num_episodes}", cfg.play_sounds)
+        # Determine the starting episode index.
+        if cfg.dataset.start_episode_idx is not None:
+            start_idx = cfg.dataset.start_episode_idx
+            if start_idx < dataset.num_episodes:
+                logging.warning(
+                    f"Provided start_episode_idx ({start_idx}) is smaller than the current number of episodes "
+                    f"({dataset.num_episodes}). This may overwrite existing episodes."
+                )
+            # Set the dataset's internal episode counter to the desired start index.
+            dataset.episode_idx = start_idx
+        else:
+            # If not specified, start from the end of the existing dataset.
+            start_idx = dataset.num_episodes
+
+        num_episodes_to_record = cfg.dataset.num_episodes
+        end_idx = start_idx + num_episodes_to_record
+
+        # We use a separate counter for the loop to avoid confusion with dataset.episode_idx
+        recorded_episodes_count = 0
+
+        while recorded_episodes_count < num_episodes_to_record and not events["stop_recording"]:
+            # Use dataset.episode_idx for logging the correct episode number
+            current_episode_idx = dataset.episode_idx
+            log_say(f"Recording episode {current_episode_idx}", cfg.play_sounds)
+
             record_loop(
                 robot=robot,
                 events=events,
@@ -351,11 +384,9 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 display_data=cfg.display_data,
             )
 
-            # Execute a few seconds without recording to give time to manually reset the environment
-            # Skip reset for the last episode to be recorded
-            if not events["stop_recording"] and (
-                (recorded_episodes < cfg.dataset.num_episodes - 1) or events["rerecord_episode"]
-            ):
+            # Reset environment unless it's the very last episode.
+            is_last_episode_to_record = (recorded_episodes_count == num_episodes_to_record - 1)
+            if not events["stop_recording"] and (not is_last_episode_to_record or events["rerecord_episode"]):
                 log_say("Reset the environment", cfg.play_sounds)
                 record_loop(
                     robot=robot,
@@ -368,14 +399,15 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 )
 
             if events["rerecord_episode"]:
-                log_say("Re-record episode", cfg.play_sounds)
+                log_say(f"Re-recording episode {current_episode_idx}", cfg.play_sounds)
                 events["rerecord_episode"] = False
                 events["exit_early"] = False
                 dataset.clear_episode_buffer()
+                # The loop will re-run with the same episode index, so we don't increment the counter.
                 continue
 
             dataset.save_episode()
-            recorded_episodes += 1
+            recorded_episodes_count += 1
 
     log_say("Stop recording", cfg.play_sounds, blocking=True)
 
