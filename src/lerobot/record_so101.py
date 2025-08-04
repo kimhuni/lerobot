@@ -66,8 +66,8 @@ from pprint import pformat
 from lerobot.cameras import (  # noqa: F401
     CameraConfig,  # noqa: F401
 )
-from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig  # noqa: F401
 from lerobot.cameras.realsense.configuration_realsense import RealSenseCameraConfig  # noqa: F401
+from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig  # noqa: F401
 from lerobot.configs import parser
 from lerobot.configs.policies import PreTrainedConfig
 from lerobot.datasets.image_writer import safe_stop_image_writer
@@ -132,7 +132,7 @@ class DatasetRecordConfig:
     # Encode frames in the dataset into video
     video: bool = True
     # Upload dataset to Hugging Face hub.
-    push_to_hub: bool = True
+    push_to_hub: bool = False
     # Upload on private repository on the Hugging Face hub.
     private: bool = False
     # Add tags to your dataset on the hub.
@@ -368,8 +368,8 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         recorded_episodes_count = 0
 
         while recorded_episodes_count < num_episodes_to_record and not events["stop_recording"]:
-            # Use dataset.episode_idx for logging the correct episode number
-            current_episode_idx = dataset.episode_idx
+            # Use dataset.num_episodes for logging the correct episode number
+            current_episode_idx = dataset.num_episodes
             log_say(f"Recording episode {current_episode_idx}", cfg.play_sounds)
 
             record_loop(

@@ -262,7 +262,7 @@ class RealSenseCamera(Camera):
                 f"Please use a unique serial number instead. Found SNs: {serial_numbers}"
             )
 
-        serial_number = str(found_devices[0]["serial_number"])
+        serial_number = str(found_devices[0]["id"])
         return serial_number
 
     def _configure_rs_pipeline_config(self, rs_config):
