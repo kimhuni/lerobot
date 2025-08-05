@@ -98,7 +98,7 @@ from lerobot.teleoperators import (  # noqa: F401
 )
 from lerobot.teleoperators.keyboard.teleop_keyboard import KeyboardTeleop
 from lerobot.utils.control_utils import (
-    init_keyboard_listener,
+    #init_keyboard_listener,
     is_headless,
     predict_action,
     sanity_check_dataset_name,
@@ -111,6 +111,7 @@ from lerobot.utils.utils import (
     log_say,
 )
 from lerobot.utils.visualization_utils import _init_rerun, log_rerun_data
+from pynput import keyboard
 
 
 @dataclass
@@ -170,7 +171,7 @@ class RecordConfig:
     # Use vocal synthesis to read events.
     play_sounds: bool = True
     # Resume recording on an existing dataset.
-    resume: bool = False
+    # resume: bool = False
 
     def __post_init__(self):
         # HACK: We parse again the cli args here to get the pretrained path if there was one.
@@ -298,33 +299,38 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
     action_features = hw_to_dataset_features(robot.action_features, "action", cfg.dataset.video)
     obs_features = hw_to_dataset_features(robot.observation_features, "observation", cfg.dataset.video)
-    dataset_features = {**action_features, **obs_features}
+    dataset_features = {**action_features, **obs_features
 
-    should_resume = cfg.resume
-
-    if should_resume:
-        logging.info(f"Loading existing dataset: {cfg.dataset.repo_id}")
-        try:
-            dataset = LeRobotDataset(
-                cfg.dataset.repo_id,
-                root=cfg.dataset.root,
-                batch_encoding_size=cfg.dataset.video_encoding_batch_size,
+    try:
+        # 1. 기존 데이터셋 로드를 시도합니다.
+        logging.info(f"Attempting to load existing dataset: {cfg.dataset.repo_id}")
+        dataset = LeRobotDataset(
+            cfg.dataset.repo_id,
+            root=cfg.dataset.root,
+            batch_encoding_size=cfg.dataset.video_encoding_batch_size,
+        )
+        if hasattr(robot, "cameras") and len(robot.cameras) > 0:
+            dataset.start_image_writer(
+                num_processes=cfg.dataset.num_image_writer_processes,
+                num_threads=cfg.dataset.num_image_writer_threads_per_camera * len(robot.cameras),
             )
-            if hasattr(robot, "cameras") and len(robot.cameras) > 0:
-                dataset.start_image_writer(
-                    num_processes=cfg.dataset.num_image_writer_processes,
-                    num_threads=cfg.dataset.num_image_writer_threads_per_camera * len(robot.cameras),
-                )
-            sanity_check_dataset_robot_compatibility(dataset, robot, cfg.dataset.fps, dataset_features)
-        except FileNotFoundError:
-             logging.error(f"Dataset not found at {cfg.dataset.root}/{cfg.dataset.repo_id}. Cannot resume.")
-             logging.error("Please check the path or run without --resume to create a new dataset.")
-             return
+        sanity_check_dataset_robot_compatibility(dataset, robot, cfg.dataset.fps, dataset_features)
+        logging.info(f"Successfully loaded existing dataset. It has {dataset.num_episodes} episodes.")
 
-    else:
-        # Create empty dataset or load existing saved episodes
+    except FileNotFoundError:
+        # 2. 데이터셋이 존재하지 않으면 (FileNotFoundError 발생), 새로 생성합니다.
+        logging.info(f"Dataset not found. Creating new dataset: {cfg.dataset.repo_id}")
         sanity_check_dataset_name(cfg.dataset.repo_id, cfg.policy)
-        logging.info(f"Creating new dataset: {cfg.dataset.repo_id}")
+
+        # 새 데이터셋 생성 시 start_episode_idx가 0이 아닌 값으로 주어지면 경고합니다.
+        if cfg.dataset.start_episode_idx is not None and cfg.dataset.start_episode_idx != 0:
+            logging.warning(
+                f"A new dataset is being created, but 'start_episode_idx' is set to {cfg.dataset.start_episode_idx}. "
+                "It will be ignored and recording will start from episode 0."
+            )
+            # 새 데이터셋이므로 start_episode_idx를 None으로 설정하여 0부터 시작하도록 합니다.
+            cfg.dataset.start_episode_idx = None
+
         dataset = LeRobotDataset.create(
             cfg.dataset.repo_id,
             cfg.dataset.fps,
@@ -423,6 +429,34 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
     log_say("Exiting", cfg.play_sounds)
     return dataset
+
+def init_keyboard_listener():
+    events = {
+        #"stop_recording": False,    # 전체 녹화 중단 (q)
+        #"rerecord_episode": False,  # 현재 에피소드 재녹화 (r)
+        "exit_early": False,        # 현재 루프(에피소드) 조기 종료 (esc)
+    }
+
+    def on_press(key):
+        # try:
+        #     # 일반 키 처리
+        #     if key.char == "q":
+        #         print(">>> 'q' pressed. Stopping recording at the end of this episode.")
+        #         events["stop_recording"] = True
+        #     elif key.char == "r":
+        #         print(">>> 'r' pressed. Re-recording this episode.")
+        #         events["rerecord_episode"] = True
+        #         events["exit_early"] = True  # 재녹화를 위해 현재 루프 즉시 종료
+        #
+        # except AttributeError:
+        #     # 특수 키 처리
+        if key == keyboard.Key.esc:
+            print(">>> 'Esc' pressed. Finishing this episode early.")
+            events["exit_early"] = True
+
+    listener = keyboard.Listener(on_press=on_press)
+    listener.start()
+    return listener, events
 
 
 if __name__ == "__main__":
