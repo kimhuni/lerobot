@@ -16,7 +16,7 @@ python -m lerobot.record_so101 \
     --teleop.port=/dev/ttyACM0 \
     --teleop.id=master \
     --dataset.repo_id=isl/dataset \
-    --dataset.root=/home/isl-so100/Desktop/disk/data/${task_name} \
+    --dataset.root="/home/isl-so100/Desktop/disk/data/${task_name}" \
     --dataset.start_episode_idx=${start_episode_index} \
     --dataset.num_episodes=${num_dataset_record} \
     --dataset.fps=30 \
@@ -25,4 +25,4 @@ python -m lerobot.record_so101 \
     --dataset.single_task="${task_name}"
 
 python -m lerobot.convert_lerobot_to_pickle \
-  --path=/home/isl-so100/Desktop/disk/data/${task_name}
+  --path="/home/isl-so100/Desktop/disk/data/${task_name}"
