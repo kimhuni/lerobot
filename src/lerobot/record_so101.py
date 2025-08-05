@@ -115,10 +115,10 @@ from lerobot.utils.visualization_utils import _init_rerun, log_rerun_data
 
 @dataclass
 class DatasetRecordConfig:
-    # Dataset identifier. By convention it should match '{hf_username}/{dataset_name}' (e.g. `lerobot/test`).
-    repo_id: str
     # A short but accurate description of the task performed during the recording (e.g. "Pick the Lego block and drop it in the box on the right.")
     single_task: str
+    # Dataset identifier. By convention it should match '{hf_username}/{dataset_name}' (e.g. `lerobot/test`).
+    repo_id: str = "islab_dataset"
     # Root directory where the dataset will be stored (e.g. 'dataset/path').
     root: str | Path | None = None
     # Limit the frames per second.
@@ -199,7 +199,7 @@ def record_loop(
     policy: PreTrainedPolicy | None = None,
     control_time_s: int | None = None,
     single_task: str | None = None,
-    display_data: bool = False,
+    display_data: bool = True,
 ):
     if dataset is not None and dataset.fps != fps:
         raise ValueError(f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps}).")
@@ -300,7 +300,7 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
     obs_features = hw_to_dataset_features(robot.observation_features, "observation", cfg.dataset.video)
     dataset_features = {**action_features, **obs_features}
 
-    should_resume = cfg.resume or (cfg.dataset.start_episode_idx is not None)
+    should_resume = cfg.resume
 
     if should_resume:
         logging.info(f"Loading existing dataset: {cfg.dataset.repo_id}")
@@ -368,8 +368,8 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
         recorded_episodes_count = 0
 
         while recorded_episodes_count < num_episodes_to_record and not events["stop_recording"]:
-            # Use dataset.num_episodes for logging the correct episode number
-            current_episode_idx = dataset.num_episodes
+            # Use dataset.episode_idx for logging the correct episode number
+            current_episode_idx = dataset.episode_idx
             log_say(f"Recording episode {current_episode_idx}", cfg.play_sounds)
 
             record_loop(

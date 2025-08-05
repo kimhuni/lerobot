@@ -24,8 +24,8 @@ from ..config import RobotConfig
 @RobotConfig.register_subclass("bi_so100_follower")
 @dataclass
 class BiSO100FollowerConfig(RobotConfig):
-    left_arm_port: str
-    right_arm_port: str
+    left_arm_port: str = "/dev/ttyACM0"
+    right_arm_port: str = "/dev/ttyACM1"
 
     # Optional
     left_arm_disable_torque_on_disconnect: bool = True
