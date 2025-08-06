@@ -1,9 +1,10 @@
 sudo chmod 666 /dev/ttyACM0
 sudo chmod 666 /dev/ttyACM1
 
-start_episode_index = 0
-num_dataset_record = 20
-task_name = "grab the black cube"
+start_episode_index=0
+num_dataset_record=20
+task_name="grab the black cube"
+dataset_creator="gh"
 
 python -m lerobot.record_so101 \
     --robot.type=so101_follower \
@@ -21,4 +22,7 @@ python -m lerobot.record_so101 \
     --dataset.fps=30 \
     --dataset.episode_time_s=10 \
     --dataset.reset_time_s=1 \
-    --dataset.single_task=${task_name}
+    --dataset.single_task="${task_name}"
+
+python -m lerobot.convert_lerobot_to_pickle \
+  --path=/home/isl-so100/Desktop/disk/data/${task_name}

@@ -59,9 +59,14 @@ python -m lerobot.record \
 
 import logging
 import time
+import json
+import shutil
+from datetime import datetime
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from pprint import pformat
+import pandas as pd
+from pathlib import Path
 
 from lerobot.cameras import (  # noqa: F401
     CameraConfig,  # noqa: F401
@@ -152,6 +157,8 @@ class DatasetRecordConfig:
     video_encoding_batch_size: int = 1
     # Specify the starting episode index for recording. If None, it appends to the existing dataset.
     start_episode_idx: int | None = None
+    # name of the person who is recording the data
+    creator: str = "default_user"
 
     def __post_init__(self):
         if self.single_task is None:
@@ -299,49 +306,53 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
 
     action_features = hw_to_dataset_features(robot.action_features, "action", cfg.dataset.video)
     obs_features = hw_to_dataset_features(robot.observation_features, "observation", cfg.dataset.video)
-    dataset_features = {**action_features, **obs_features
+    dataset_features = {**action_features, **obs_features}
 
-    try:
-        # 1. 기존 데이터셋 로드를 시도합니다.
-        logging.info(f"Attempting to load existing dataset: {cfg.dataset.repo_id}")
-        dataset = LeRobotDataset(
-            cfg.dataset.repo_id,
-            root=cfg.dataset.root,
-            batch_encoding_size=cfg.dataset.video_encoding_batch_size,
+    # 1. 데이터셋의 전체 로컬 경로를 구성합니다.
+    #    cfg.dataset.root가 지정되지 않은 경우 현재 작업 디렉토리를 기준으로 합니다.
+    root_path = Path(cfg.dataset.root) if cfg.dataset.root else Path.cwd()
+    dataset_path = root_path / cfg.dataset.repo_id
+
+    # 2. LeRobotDataset을 호출하기 전에 디렉토리가 실제로 존재하는지 직접 확인합니다.
+    if dataset_path.is_dir():
+    # 2-A. 디렉토리가 존재하면, 기존 데이터셋을 로드합니다.
+        logging.info(f"Dataset directory found at '{dataset_path}'. Loading existing dataset.")
+    dataset = LeRobotDataset(
+        cfg.dataset.repo_id,
+        root=cfg.dataset.root,
+        batch_encoding_size=cfg.dataset.video_encoding_batch_size,
+    )
+    if hasattr(robot, "cameras") and len(robot.cameras) > 0:
+        dataset.start_image_writer(
+            num_processes=cfg.dataset.num_image_writer_processes,
+            num_threads=cfg.dataset.num_image_writer_threads_per_camera * len(robot.cameras),
         )
-        if hasattr(robot, "cameras") and len(robot.cameras) > 0:
-            dataset.start_image_writer(
-                num_processes=cfg.dataset.num_image_writer_processes,
-                num_threads=cfg.dataset.num_image_writer_threads_per_camera * len(robot.cameras),
-            )
-        sanity_check_dataset_robot_compatibility(dataset, robot, cfg.dataset.fps, dataset_features)
-        logging.info(f"Successfully loaded existing dataset. It has {dataset.num_episodes} episodes.")
+    sanity_check_dataset_robot_compatibility(dataset, robot, cfg.dataset.fps, dataset_features)
+    logging.info(f"Successfully loaded existing dataset. It has {dataset.num_episodes} episodes.")
 
-    except FileNotFoundError:
-        # 2. 데이터셋이 존재하지 않으면 (FileNotFoundError 발생), 새로 생성합니다.
-        logging.info(f"Dataset not found. Creating new dataset: {cfg.dataset.repo_id}")
-        sanity_check_dataset_name(cfg.dataset.repo_id, cfg.policy)
+    else:
+    # 2-B. 디렉토리가 없으면, 새로운 데이터셋을 생성합니다.
+    logging.info(f"Dataset directory not found at '{dataset_path}'. Creating new dataset...")
+    sanity_check_dataset_name(cfg.dataset.repo_id, cfg.policy)
 
-        # 새 데이터셋 생성 시 start_episode_idx가 0이 아닌 값으로 주어지면 경고합니다.
-        if cfg.dataset.start_episode_idx is not None and cfg.dataset.start_episode_idx != 0:
-            logging.warning(
-                f"A new dataset is being created, but 'start_episode_idx' is set to {cfg.dataset.start_episode_idx}. "
-                "It will be ignored and recording will start from episode 0."
-            )
-            # 새 데이터셋이므로 start_episode_idx를 None으로 설정하여 0부터 시작하도록 합니다.
-            cfg.dataset.start_episode_idx = None
-
-        dataset = LeRobotDataset.create(
-            cfg.dataset.repo_id,
-            cfg.dataset.fps,
-            root=cfg.dataset.root,
-            robot_type=robot.name,
-            features=dataset_features,
-            use_videos=cfg.dataset.video,
-            image_writer_processes=cfg.dataset.num_image_writer_processes,
-            image_writer_threads=cfg.dataset.num_image_writer_threads_per_camera * len(robot.cameras),
-            batch_encoding_size=cfg.dataset.video_encoding_batch_size,
+    if cfg.dataset.start_episode_idx is not None and cfg.dataset.start_episode_idx != 0:
+        logging.warning(
+            f"A new dataset is being created, but 'start_episode_idx' is set to {cfg.dataset.start_episode_idx}. "
+            "It will be ignored and recording will start from episode 0."
         )
+    # cfg.dataset.start_episode_idx = None
+
+    dataset = LeRobotDataset.create(
+        cfg.dataset.repo_id,
+        cfg.dataset.fps,
+        root=cfg.dataset.root,
+        robot_type=robot.name,
+        features=dataset_features,
+        use_videos=cfg.dataset.video,
+        image_writer_processes=cfg.dataset.num_image_writer_processes,
+        image_writer_threads=cfg.dataset.num_image_writer_threads_per_camera * len(robot.cameras),
+        batch_encoding_size=cfg.dataset.video_encoding_batch_size,
+    )
 
     # Load pretrained policy
     policy = None if cfg.policy is None else make_policy(cfg.policy, ds_meta=dataset.meta)
@@ -413,6 +424,8 @@ def record(cfg: RecordConfig) -> LeRobotDataset:
                 continue
 
             dataset.save_episode()
+
+
             recorded_episodes_count += 1
 
     log_say("Stop recording", cfg.play_sounds, blocking=True)
